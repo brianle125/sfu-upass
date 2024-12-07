@@ -1,5 +1,6 @@
 # sfu-upass
 Inspired by: https://github.com/Armour/upass-sfu
+
 A script for an SFU student to automatically renew their monthly Translink U-Pass, updated to SFU's current MFA login requirements and written with the Selenium framework.
 
 ## Instructions
