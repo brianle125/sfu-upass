@@ -1,10 +1,11 @@
 # sfu-upass
 Inspired by: https://github.com/Armour/upass-sfu
 
-A script for an SFU student to automatically renew their monthly Translink U-Pass, updated to SFU's current MFA login requirements and written with the Selenium framework.
+A utility script for an SFU student to automatically renew their monthly TransLink U-Pass, updated to accommodate SFU's MFA requirements. Written with the Selenium framework, which makes this slower than the original script that uses the requests API.
 
 ## Instructions
-### 1. Update the config.json file with your SFU username and password
+Note: This will require the user to have their MFA code ready for manual input. 
+### 1. Update the config.json file with your SFU username and password.
 ```json
 {
   "username": "username",
@@ -12,7 +13,7 @@ A script for an SFU student to automatically renew their monthly Translink U-Pas
 }
 ```
 
-### 2. Run the script
+### 2. Run the script.
 Windows:
 ```shell
 python sfu-upass.py
@@ -21,4 +22,9 @@ python sfu-upass.py
 Unix:
 ```shell
 python3 sfu-upass.py
+```
+
+### 3. Input the MFA code in the terminal when prompted.
+```
+>>> Enter your MFA code: <input code here>
 ```

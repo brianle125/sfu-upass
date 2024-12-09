@@ -1,15 +1,11 @@
-import os
-import json
-import urllib3
-import requests
-import webbrowser
+import argparse, sys, os, json, urllib3, webbrowser
 
 from time import sleep
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
-from lxml import html, etree
+from selenium.webdriver.support.wait import WebDriverWait
 from typing import Dict, List
 
 class UPass():
@@ -25,30 +21,33 @@ class UPass():
                 'username': config_data['username'],
                 'password': config_data['password']
             }
-            # IFTTT is optional config
-            self._ifttt: Dict[str, str] = {
-                'event_name': config_data.get('ifttt_event', ''),
-                'key': config_data.get('ifttt_key', '')
-            }
     
     def request(self):
         self._request_upass()
 
-    def upass(self):
-        # Suppress info msg: 'Created TensorFlow Lite XNNPACK delegate for CPU.'
-        chrome_options = webdriver.ChromeOptions()
-        chrome_options.add_argument('--log-level=2')
-        driver = webdriver.Chrome(options=chrome_options)
+    def is_mfa_valid(self, input):
+        return input.isnumeric() and len(input.strip()) == 6
 
-        # Get to Upassbc page
+
+    def _request_upass(self):
+        chrome_options = webdriver.ChromeOptions()
+        chrome_options.add_argument('--log-level=2')  # Suppresses message: 'Created TensorFlow Lite XNNPACK delegate for CPU.' 
+        chrome_options.add_argument('--headless=new')
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.implicitly_wait(10)
+
+        # Get to U-Pass BC page
+        print("Opening U-Pass BC")
         driver.get('https://upassbc.translink.ca')
         dropdown = Select(driver.find_element(by=By.ID, value= "PsiId"))
         dropdown.select_by_visible_text('Simon Fraser University')
         goButton = driver.find_element(by=By.ID, value= "goButton")
         goButton.click()
         assert driver.current_url.startswith("https://cas.sfu.ca/cas/login")
+        # driver.get_screenshot_as_file("screenshot.png")
 
         # Initial SFU login
+        print("Logging in to SFU...")
         sfu_data: Dict[str, str] = self._sfu_usr_pass
         username = driver.find_element(by=By.ID, value="username")
         username.send_keys(sfu_data['username'])
@@ -57,26 +56,48 @@ class UPass():
         submit = driver.find_element(by=By.NAME, value="submit")
         submit.click()
 
+        # Validate that credentials were correct
+        assert len(driver.find_elements(by=By.XPATH, value="//div[contains(@class, 'alert alert-danger')]")) == 0, "Invalid credentials! Please check your config file."
+
+        print("Initializing MFA...")
         # SFU MFA
         iframe = driver.find_element(by=By.ID, value='duo_iframe')
-        driver.switch_to.frame(iframe)
-        mfa_code = input("Enter your MFA code: ")
-        code = driver.find_element(by=By.ID, value="code")
-        code.send_keys(mfa_code)
+        driver.switch_to.frame(iframe) # Access the MFA input
 
-        # To-do: check for invalid MFA input
-        submit_mfa = driver.find_element(by=By.XPATH, value="//button[contains(@class, 'ui primary button')]")
-        submit_mfa.click()
+        mfa_successful = False
+        while not mfa_successful:
+            # To-do: check for invalid MFA input
+            mfa_code = input("Enter your MFA code: ")
+            code = driver.find_element(by=By.ID, value="code")
+
+            if not self.is_mfa_valid(mfa_code):
+                print("Invalid MFA please re-enter: ")
+                continue
+
+            code.send_keys(mfa_code)
+            submit_mfa = driver.find_element(by=By.XPATH, value="//button[contains(@class, 'ui primary button')]")
+            submit_mfa.click()
+
+            # If the correct MFA was entered, break the loop
+            if len(driver.find_elements(by=By.XPATH, value="//div[contains(@class, 'ui error icon message')]")) != 0:
+                print("Incorrect MFA! Please re-enter: ")
+                continue
+            else:
+                print("MFA successful!")
+                mfa_successful = True
+
 
         # To do: have a better way of waiting for the UPass page to load
-        sleep(5)
+        wait = WebDriverWait(driver, timeout=2)
+        wait.until(lambda d: driver.current_url == 'https://upassbc.translink.ca/fs/')
 
         # Check if eligible to request
         assert driver.current_url == 'https://upassbc.translink.ca/fs/'
+        print("🕒 Requesting U-Pass...")
         checkbox_elems = driver.find_elements(by=By.XPATH, value="//input[@type='checkbox']")
 
         if len(checkbox_elems) == 0:
-            print("Unable to request for UPass at this time.")
+            print("❌ Unable to request for U-Pass at this time. U-Pass cen be requested on the 16th of each month.")
         else:
             # Request eligibility
             for checkbox in checkbox_elems:
@@ -84,12 +105,13 @@ class UPass():
             
             request_button = driver.find_element(by=By.ID, value="requestButton")
             if request_button.get_attribute("disabled") == "disabled":
-                print("Unable to request for UPass")
+                print("❌ Unable to request for U-Pass")
             else:
                 request_button.click()
-                print("Successfully requested UPass!")
+                print("🟢 Successfully requested U-Pass!")
 
 
 if __name__ == '__main__':
     upass = UPass()
-    upass.upass()
+    upass.request()
+
