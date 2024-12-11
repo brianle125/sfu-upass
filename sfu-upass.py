@@ -2,10 +2,11 @@ import argparse, sys, os, json, urllib3, webbrowser
 
 from time import sleep
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from typing import Dict, List
 
 class UPass():
@@ -32,9 +33,10 @@ class UPass():
     def _request_upass(self):
         chrome_options = webdriver.ChromeOptions()
         chrome_options.add_argument('--log-level=2')  # Suppresses message: 'Created TensorFlow Lite XNNPACK delegate for CPU.' 
-        chrome_options.add_argument('--headless=new')
+        # chrome_options.add_argument('--headless=new')
         driver = webdriver.Chrome(options=chrome_options)
         driver.implicitly_wait(10)
+        wait = WebDriverWait(driver, timeout=2)
 
         # Get to U-Pass BC page
         print("Opening U-Pass BC")
@@ -61,47 +63,52 @@ class UPass():
 
         print("Initializing MFA...")
         # SFU MFA
-        iframe = driver.find_element(by=By.ID, value='duo_iframe')
-        driver.switch_to.frame(iframe) # Access the MFA input
-
         mfa_successful = False
         while not mfa_successful:
+            iframe = driver.find_element(by=By.ID, value='duo_iframe')
+            driver.switch_to.frame(iframe)
+
             # To-do: check for invalid MFA input
             mfa_code = input("Enter your MFA code: ")
             code = driver.find_element(by=By.ID, value="code")
 
             if not self.is_mfa_valid(mfa_code):
                 print("Invalid MFA please re-enter: ")
+                driver.switch_to.default_content()
                 continue
 
             code.send_keys(mfa_code)
             submit_mfa = driver.find_element(by=By.XPATH, value="//button[contains(@class, 'ui primary button')]")
             submit_mfa.click()
 
+            print("Validating MFA...")
+
             # If the correct MFA was entered, break the loop
-            if len(driver.find_elements(by=By.XPATH, value="//div[contains(@class, 'ui error icon message')]")) != 0:
-                print("Incorrect MFA! Please re-enter: ")
-                continue
-            else:
-                print("MFA successful!")
+            driver.switch_to.default_content()
+            # To do: have a better way of waiting for the UPass page to load
+
+            try:
+                wait.until(lambda d: driver.current_url == 'https://upassbc.translink.ca/fs/')
                 mfa_successful = True
+            except TimeoutException:
+                print("Incorrect MFA!")
+                continue
 
+        print("MFA successful!")
 
-        # To do: have a better way of waiting for the UPass page to load
-        wait = WebDriverWait(driver, timeout=2)
-        wait.until(lambda d: driver.current_url == 'https://upassbc.translink.ca/fs/')
 
         # Check if eligible to request
         assert driver.current_url == 'https://upassbc.translink.ca/fs/'
-        print("🕒 Requesting U-Pass...")
         checkbox_elems = driver.find_elements(by=By.XPATH, value="//input[@type='checkbox']")
 
         if len(checkbox_elems) == 0:
             print("❌ Unable to request for U-Pass at this time. U-Pass cen be requested on the 16th of each month.")
         else:
             # Request eligibility
+            print("🕒 Requesting U-Pass...")
             for checkbox in checkbox_elems:
-                checkbox.click()
+                print(checkbox.id)
+                print(checkbox.text)
             
             request_button = driver.find_element(by=By.ID, value="requestButton")
             if request_button.get_attribute("disabled") == "disabled":
