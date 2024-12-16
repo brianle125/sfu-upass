@@ -46,7 +46,6 @@ class UPass():
         goButton = driver.find_element(by=By.ID, value= "goButton")
         goButton.click()
         assert driver.current_url.startswith("https://cas.sfu.ca/cas/login")
-        # driver.get_screenshot_as_file("screenshot.png")
 
         # Initial SFU login
         print("Logging in to SFU...")
@@ -62,13 +61,13 @@ class UPass():
         assert len(driver.find_elements(by=By.XPATH, value="//div[contains(@class, 'alert alert-danger')]")) == 0, "Invalid credentials! Please check your config file."
 
         print("Initializing MFA...")
-        # SFU MFA
+
+        # Validate SFU MFA input
         mfa_successful = False
         while not mfa_successful:
             iframe = driver.find_element(by=By.ID, value='duo_iframe')
             driver.switch_to.frame(iframe)
 
-            # To-do: check for invalid MFA input
             mfa_code = input("Enter your MFA code: ")
             code = driver.find_element(by=By.ID, value="code")
 
@@ -81,7 +80,6 @@ class UPass():
             submit_mfa = driver.find_element(by=By.XPATH, value="//button[contains(@class, 'ui primary button')]")
             submit_mfa.click()
             print("Validating MFA...")
-            # driver.switch_to.default_content()
 
             # If the correct MFA was entered, break the loop
             try:
@@ -96,25 +94,26 @@ class UPass():
          # Check if U-Pass is behaving erroneously or user is given access privileges
         assert driver.current_url != "https://upassbc.translink.ca/home/noprivilege", "❌ Could not login to U-Pass! Either U-Pass site is not working or SFU has not set you up for U-Pass!"
 
-        # Check if eligible to request
         assert driver.current_url == 'https://upassbc.translink.ca/fs/'
-        checkbox_elems = driver.find_elements(by=By.XPATH, value="//input[@type='checkbox']")
 
-        if len(checkbox_elems) == 0:
-            print("❌ Unable to request for U-Pass at this time. U-Pass cen be requested on the 16th of each month.")
-        else:
+        
+        # Check if eligible to request
+        try:
+            driver.switch_to.default_content()
+            checkbox = driver.find_element(by=By.ID, value= "chk_1")
             # Request eligibility
             print("🕒 Requesting U-Pass...")
-            for checkbox in checkbox_elems:
-                print(checkbox.id)
-                print(checkbox.text)
-            
+            checkbox.click()
             request_button = driver.find_element(by=By.ID, value="requestButton")
-            if request_button.get_attribute("disabled") == "disabled":
+            if request_button.get_attribute("disabled") != None:
                 print("❌ Unable to request for U-Pass")
             else:
                 request_button.click()
                 print("🟢 Successfully requested U-Pass!")
+        # No checkbox option was found
+        except NoSuchElementException:
+            print("❌ Unable to request for U-Pass at this time. U-Pass cen be requested on the 16th of each month.")
+        
 
 
 if __name__ == '__main__':
