@@ -3,6 +3,8 @@ Inspired by: https://github.com/Armour/upass-sfu
 
 A utility script for an SFU student to automatically renew their monthly TransLink U-Pass, updated to accommodate SFU's MFA requirements. Written with the Selenium framework, which makes this slower than the original script that uses the requests API.
 
+Currently limited to chromedriver. I plan to implement other toggleable browsers in the future.
+
 ## Instructions
 Note: This will require the user to have their MFA code ready for manual input. 
 ### 1. Update the config.json file with your SFU username and password.
