@@ -33,9 +33,9 @@ class UPass():
     def _request_upass(self):
         chrome_options = webdriver.ChromeOptions()
         chrome_options.add_argument('--log-level=2')  # Suppresses message: 'Created TensorFlow Lite XNNPACK delegate for CPU.' 
-        # chrome_options.add_argument('--headless=new')
+        chrome_options.add_argument('--headless=new')
         driver = webdriver.Chrome(options=chrome_options)
-        driver.implicitly_wait(10)
+        driver.implicitly_wait(5)
         wait = WebDriverWait(driver, timeout=2)
 
         # Get to U-Pass BC page
@@ -80,15 +80,12 @@ class UPass():
             code.send_keys(mfa_code)
             submit_mfa = driver.find_element(by=By.XPATH, value="//button[contains(@class, 'ui primary button')]")
             submit_mfa.click()
-
             print("Validating MFA...")
+            # driver.switch_to.default_content()
 
             # If the correct MFA was entered, break the loop
-            driver.switch_to.default_content()
-            # To do: have a better way of waiting for the UPass page to load
-
             try:
-                wait.until(lambda d: driver.current_url == 'https://upassbc.translink.ca/fs/')
+                wait.until(lambda d: driver.current_url.startswith('https://upassbc.translink.ca'))
                 mfa_successful = True
             except TimeoutException:
                 print("Incorrect MFA!")
@@ -96,6 +93,8 @@ class UPass():
 
         print("MFA successful!")
 
+         # Check if U-Pass is behaving erroneously or user is given access privileges
+        assert driver.current_url != "https://upassbc.translink.ca/home/noprivilege", "❌ Could not login to U-Pass! Either U-Pass site is not working or SFU has not set you up for U-Pass!"
 
         # Check if eligible to request
         assert driver.current_url == 'https://upassbc.translink.ca/fs/'
