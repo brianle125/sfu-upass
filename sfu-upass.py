@@ -23,18 +23,18 @@ class UPass():
                 'password': config_data['password']
             }
     
-    def request(self):
-        self._request_upass()
+    def request(self, driver):
+        self._request_upass(driver)
 
     def is_mfa_valid(self, input):
         return input.isnumeric() and len(input.strip()) == 6
 
 
-    def _request_upass(self):
-        chrome_options = webdriver.ChromeOptions()
-        chrome_options.add_argument('--log-level=2')  # Suppresses message: 'Created TensorFlow Lite XNNPACK delegate for CPU.' 
-        chrome_options.add_argument('--headless=new')
-        driver = webdriver.Chrome(options=chrome_options)
+    def _request_upass(self, driver):
+        # chrome_options = webdriver.ChromeOptions()
+        # chrome_options.add_argument('--log-level=2')  # Suppresses message: 'Created TensorFlow Lite XNNPACK delegate for CPU.' 
+        # chrome_options.add_argument('--headless=new')
+        # driver = webdriver.Chrome(options=chrome_options)
         driver.implicitly_wait(5)
         wait = WebDriverWait(driver, timeout=2)
 
@@ -118,5 +118,34 @@ class UPass():
 
 if __name__ == '__main__':
     upass = UPass()
-    upass.request()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--browser", help="Use either Chrome or Firefox webdrivers")
+    args = parser.parse_args()
+
+    # Default to using chromedriver
+    match args.browser:
+        case "firefox":
+            firefox_options = webdriver.FirefoxOptions()
+            firefox_options.add_argument("--headless")
+            driver = webdriver.Firefox(options=firefox_options)
+        case "safari":
+            safari_options = webdriver.SafariOptions()
+            safari_options.add_argument("--headless")
+            driver = webdriver.Safari(options=safari_options)
+        case _:
+            driver = chrome_options = webdriver.ChromeOptions()
+            chrome_options.add_argument('--log-level=2')  # Suppresses message: 'Created TensorFlow Lite XNNPACK delegate for CPU.' 
+            chrome_options.add_argument('--headless=new')
+            driver = webdriver.Chrome(options=chrome_options)
+            print("using chrome")
+    
+    upass.request(driver)
+
+
+    
+
+    
+
+
+    # upass.request()
 
