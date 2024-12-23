@@ -2,12 +2,13 @@ import argparse, sys, os, json, urllib3, webbrowser
 
 from time import sleep
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException, NoSuchDriverException, StaleElementReferenceException, TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from typing import Dict, List
+from totp import get_mfa
 
 class UPass():
     def __init__(self):
@@ -20,21 +21,18 @@ class UPass():
             config_data: Dict[str, str] = json.load(config)
             self._sfu_usr_pass: Dict[str, str] = {
                 'username': config_data['username'],
-                'password': config_data['password']
+                'password': config_data['password'],
+                'secret_key': config_data['secret_key']
             }
     
-    def request(self):
-        self._request_upass()
+    def request(self, driver):
+        self._request_upass(driver)
 
     def is_mfa_valid(self, input):
         return input.isnumeric() and len(input.strip()) == 6
 
 
-    def _request_upass(self):
-        chrome_options = webdriver.ChromeOptions()
-        chrome_options.add_argument('--log-level=2')  # Suppresses message: 'Created TensorFlow Lite XNNPACK delegate for CPU.' 
-        chrome_options.add_argument('--headless=new')
-        driver = webdriver.Chrome(options=chrome_options)
+    def _request_upass(self, driver):
         driver.implicitly_wait(5)
         wait = WebDriverWait(driver, timeout=2)
 
@@ -61,35 +59,21 @@ class UPass():
         assert len(driver.find_elements(by=By.XPATH, value="//div[contains(@class, 'alert alert-danger')]")) == 0, "Invalid credentials! Please check your config file."
 
         print("Initializing MFA...")
-
-        # Validate SFU MFA input
         mfa_successful = False
-        while not mfa_successful:
+        while(not mfa_successful):
             iframe = driver.find_element(by=By.ID, value='duo_iframe')
             driver.switch_to.frame(iframe)
-
-            mfa_code = input("Enter your MFA code: ")
+            mfa_code = get_mfa(sfu_data['secret_key'])
             code = driver.find_element(by=By.ID, value="code")
-
-            if not self.is_mfa_valid(mfa_code):
-                print("Invalid MFA please re-enter: ")
-                driver.switch_to.default_content()
-                continue
-
             code.send_keys(mfa_code)
             submit_mfa = driver.find_element(by=By.XPATH, value="//button[contains(@class, 'ui primary button')]")
             submit_mfa.click()
-            print("Validating MFA...")
-
-            # If the correct MFA was entered, break the loop
+            print("MFA successful!")
             try:
                 wait.until(lambda d: driver.current_url.startswith('https://upassbc.translink.ca'))
                 mfa_successful = True
             except TimeoutException:
-                print("Incorrect MFA!")
-                continue
-
-        print("MFA successful!")
+                print("Incorrect MFA, reentering...")
 
          # Check if U-Pass is behaving erroneously or user is given access privileges
         assert driver.current_url != "https://upassbc.translink.ca/home/noprivilege", "❌ Could not login to U-Pass! Either U-Pass site is not working or SFU has not set you up for U-Pass!"
@@ -118,5 +102,37 @@ class UPass():
 
 if __name__ == '__main__':
     upass = UPass()
-    upass.request()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--browser", help="Use either Chrome or Firefox webdrivers")
+    args = parser.parse_args()
+
+    # Default to using chromedriver
+    try:
+        match args.browser:
+            case "firefox":
+                firefox_options = webdriver.FirefoxOptions()
+                firefox_options.add_argument("--headless")
+                driver = webdriver.Firefox(options=firefox_options)
+            case "safari":
+                safari_options = webdriver.SafariOptions()
+                safari_options.add_argument("--headless")
+                driver = webdriver.Safari(options=safari_options)
+            case _:
+                driver = chrome_options = webdriver.ChromeOptions()
+                chrome_options.add_argument('--log-level=2')  # Suppresses message: 'Created TensorFlow Lite XNNPACK delegate for CPU.' 
+                chrome_options.add_argument('--headless=new')
+                driver = webdriver.Chrome(options=chrome_options)
+    except NoSuchDriverException:
+        print("Missing relevant browser driver! (defaults to Chrome)")
+        sys.exit(0)
+    
+    upass.request(driver)
+
+
+    
+
+    
+
+
+    # upass.request()
 
