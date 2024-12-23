@@ -6,7 +6,6 @@ A utility script for an SFU student to automatically renew their monthly TransLi
 Currently limited to chromedriver. I plan to implement other toggleable browsers in the future.
 
 ## Instructions
-Note: This will require the user to have their MFA code ready for manual input. 
 ### 1. Update the config.json file with your SFU username and password.
 ```json
 {
