@@ -1,138 +1,117 @@
-import argparse, sys, os, json, urllib3, webbrowser
+import sys
+import traceback
 
-from time import sleep
+from PySide6.QtWidgets import (
+    QApplication, QWidget, QPushButton,
+    QVBoxLayout, QTextEdit, QComboBox
+)
+from PySide6.QtCore import QObject, QThread, Signal
+
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException, NoSuchDriverException, StaleElementReferenceException, TimeoutException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import Select
-from selenium.webdriver.support.wait import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from typing import Dict, List
-from totp import get_mfa
+from selenium.common.exceptions import NoSuchDriverException
 
-class UPass():
-    def __init__(self):
-        self._load_config()
-        # Disable SSL Warnings
-        urllib3.disable_warnings()
+from upass import UPass
 
-    def _load_config(self):
-        with open(os.path.dirname(os.path.realpath(__file__)) + '/config.json') as config:
-            config_data: Dict[str, str] = json.load(config)
-            self._sfu_usr_pass: Dict[str, str] = {
-                'username': config_data['username'],
-                'password': config_data['password'],
-                'secret_key': config_data['secret_key']
-            }
+
+class UPassWorker(QObject):
+    finished = Signal()
+    log = Signal(str)
+    error = Signal(str)
     
-    def request(self, driver):
-        self._request_upass(driver)
+    def __init__(self, browser):
+        super().__init__()
+        self.browser = browser
 
-    def is_mfa_valid(self, input):
-        return input.isnumeric() and len(input.strip()) == 6
-
-
-    def _request_upass(self, driver):
-        driver.implicitly_wait(5)
-        wait = WebDriverWait(driver, timeout=2)
-
-        # Get to U-Pass BC page
-        print("Opening U-Pass BC")
-        driver.get('https://upassbc.translink.ca')
-        dropdown = Select(driver.find_element(by=By.ID, value= "PsiId"))
-        dropdown.select_by_visible_text('Simon Fraser University')
-        goButton = driver.find_element(by=By.ID, value= "goButton")
-        goButton.click()
-        assert driver.current_url.startswith("https://cas.sfu.ca/cas/login")
-
-        # Initial SFU login
-        print("Logging in to SFU...")
-        sfu_data: Dict[str, str] = self._sfu_usr_pass
-        username = driver.find_element(by=By.ID, value="username")
-        username.send_keys(sfu_data['username'])
-        password = driver.find_element(by=By.ID, value="password")
-        password.send_keys(sfu_data['password'])
-        submit = driver.find_element(by=By.NAME, value="submit")
-        submit.click()
-
-        # Validate that credentials were correct
-        assert len(driver.find_elements(by=By.XPATH, value="//div[contains(@class, 'alert alert-danger')]")) == 0, "Invalid credentials! Please check your config file."
-
-        print("Initializing MFA...")
-        mfa_successful = False
-        while(not mfa_successful):
-            iframe = driver.find_element(by=By.ID, value='duo_iframe')
-            driver.switch_to.frame(iframe)
-            mfa_code = get_mfa(sfu_data['secret_key'])
-            code = driver.find_element(by=By.ID, value="code")
-            code.send_keys(mfa_code)
-            submit_mfa = driver.find_element(by=By.XPATH, value="//button[contains(@class, 'ui primary button')]")
-            submit_mfa.click()
-            print("MFA successful!")
-            try:
-                wait.until(lambda d: driver.current_url.startswith('https://upassbc.translink.ca'))
-                mfa_successful = True
-            except TimeoutException:
-                print("Incorrect MFA, reentering...")
-
-         # Check if U-Pass is behaving erroneously or user is given access privileges
-        assert driver.current_url != "https://upassbc.translink.ca/home/noprivilege", "❌ Could not login to U-Pass! Either U-Pass site is not working or SFU has not set you up for U-Pass!"
-
-        assert driver.current_url == 'https://upassbc.translink.ca/fs/'
-
-        
-        # Check if eligible to request
+    def run(self):
+        driver = None
         try:
-            driver.switch_to.default_content()
-            checkbox = driver.find_element(by=By.ID, value= "chk_1")
-            # Request eligibility
-            print("🕒 Requesting U-Pass...")
-            checkbox.click()
-            request_button = driver.find_element(by=By.ID, value="requestButton")
-            if request_button.get_attribute("disabled") != None:
-                print("❌ Unable to request for U-Pass")
+            self.log.emit("Starting browser...")
+
+            if self.browser == "Firefox":
+                options = webdriver.FirefoxOptions()
+                options.add_argument("--headless")
+                driver = webdriver.Firefox(options=options)
+
+            elif self.browser == "Safari":
+                options = webdriver.SafariOptions()
+                driver = webdriver.Safari(options=options)
+
             else:
-                request_button.click()
-                print("🟢 Successfully requested U-Pass!")
-        # No checkbox option was found
-        except NoSuchElementException:
-            print("❌ Unable to request for U-Pass at this time. U-Pass cen be requested on the 16th of each month.")
+                options = webdriver.ChromeOptions()
+                options.add_argument("--headless=new")
+                options.add_argument("--log-level=2")
+                driver = webdriver.Chrome(options=options)
+
+            upass = UPass(log_callback=self.log.emit)
+            upass.request(driver)
+
+        except Exception:
+            self.error.emit(traceback.format_exc())
         
+        finally:
+            if driver:
+                self.log.emit("Closing browser")
+                driver.quit()
+            
+            self.finished.emit()
+
+        
+# -------------------------
+# GUI
+# -------------------------
+class MainWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+
+        self.setWindowTitle("U-Pass Request Tool")
+
+        self.browser_select = QComboBox()
+        self.browser_select.addItems(["Chrome", "Firefox", "Safari"])
+
+        self.start_button = QPushButton("Request U-Pass")
+        self.log_output = QTextEdit()
+        self.log_output.setReadOnly(True)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.browser_select)
+        layout.addWidget(self.start_button)
+        layout.addWidget(self.log_output)
+
+        self.setLayout(layout)
+
+        self.start_button.clicked.connect(self.start_worker)
+
+    def start_worker(self):
+        self.start_button.setEnabled(False)
+
+        browser = self.browser_select.currentText()
+
+        self.thread = QThread()
+        self.worker = UPassWorker(browser)
+
+        self.worker.moveToThread(self.thread)
+
+        self.thread.started.connect(self.worker.run)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(
+            lambda: self.start_button.setEnabled(True)
+        )
+
+        self.worker.log.connect(self.update_log)
+        self.worker.error.connect(self.show_error)
+
+        self.thread.start()
+
+    def update_log(self, message):
+        self.log_output.append(message)
+
+    def show_error(self, error_text):
+        self.log_output.append("ERROR:\n" + error_text)
 
 
-if __name__ == '__main__':
-    upass = UPass()
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--browser", help="Use either Chrome or Firefox webdrivers")
-    args = parser.parse_args()
-
-    # Default to using chromedriver
-    try:
-        match args.browser:
-            case "firefox":
-                firefox_options = webdriver.FirefoxOptions()
-                firefox_options.add_argument("--headless")
-                driver = webdriver.Firefox(options=firefox_options)
-            case "safari":
-                safari_options = webdriver.SafariOptions()
-                safari_options.add_argument("--headless")
-                driver = webdriver.Safari(options=safari_options)
-            case _:
-                driver = chrome_options = webdriver.ChromeOptions()
-                chrome_options.add_argument('--log-level=2')  # Suppresses message: 'Created TensorFlow Lite XNNPACK delegate for CPU.' 
-                chrome_options.add_argument('--headless=new')
-                driver = webdriver.Chrome(options=chrome_options)
-    except NoSuchDriverException:
-        print("Missing relevant browser driver! (defaults to Chrome)")
-        sys.exit(0)
-    
-    upass.request(driver)
-
-
-    
-
-    
-
-
-    # upass.request()
-
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.resize(500, 500)
+    window.show()
+    sys.exit(app.exec())
