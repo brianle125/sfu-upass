@@ -10,7 +10,7 @@ from PySide6.QtCore import QObject, QThread, Signal
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchDriverException
 
-from upass import UPass
+from driver import UPass
 
 
 class UPassWorker(QObject):
@@ -66,7 +66,10 @@ class MainWindow(QWidget):
         self.setWindowTitle("U-Pass Request Tool")
 
         self.browser_select = QComboBox()
-        self.browser_select.addItems(["Chrome", "Firefox", "Safari"])
+        self.browser_select.addItems(["Chrome", "Firefox"])
+
+        if sys.platform.startswith("darwin"):
+            self.browser_select.addItems(["Safari"])
 
         self.start_button = QPushButton("Request U-Pass")
         self.log_output = QTextEdit()
