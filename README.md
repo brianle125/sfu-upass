@@ -15,7 +15,7 @@ Note: This will require the user to have their MFA code ready for manual input.
 }
 ```
 
-### 2. Run the script.
+### 2. Use the script.
 Windows:
 ```shell
 python sfu-upass.py
