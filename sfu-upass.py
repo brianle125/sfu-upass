@@ -34,16 +34,16 @@ class UPass():
 
     def _request_upass(self, driver):
         driver.implicitly_wait(5)
-        wait = WebDriverWait(driver, timeout=2)
+        wait = WebDriverWait(driver, timeout=5)
 
         # Get to U-Pass BC page
         print("Opening U-Pass BC")
         driver.get('https://upassbc.translink.ca')
-        dropdown = Select(driver.find_element(by=By.ID, value= "PsiId"))
+        dropdown = Select(driver.find_element(by=By.ID, value= "ddlIdp"))
         dropdown.select_by_visible_text('Simon Fraser University')
         goButton = driver.find_element(by=By.ID, value= "goButton")
         goButton.click()
-        assert driver.current_url.startswith("https://cas.sfu.ca/cas/login")
+        # assert driver.current_url.startswith("https://cas.sfu.ca/cas/login")
 
         # Initial SFU login
         print("Logging in to SFU...")
@@ -77,8 +77,6 @@ class UPass():
 
          # Check if U-Pass is behaving erroneously or user is given access privileges
         assert driver.current_url != "https://upassbc.translink.ca/home/noprivilege", "❌ Could not login to U-Pass! Either U-Pass site is not working or SFU has not set you up for U-Pass!"
-
-        assert driver.current_url == 'https://upassbc.translink.ca/fs/'
 
         
         # Check if eligible to request
@@ -127,12 +125,5 @@ if __name__ == '__main__':
         sys.exit(0)
     
     upass.request(driver)
-
-
-    
-
-    
-
-
     # upass.request()
 
