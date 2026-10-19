@@ -1,4 +1,4 @@
-import argparse, sys, os, json, urllib3, webbrowser
+import argparse, sys, os, json, urllib3, webbrowser, logging
 
 from time import sleep
 from selenium import webdriver
@@ -9,6 +9,11 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from typing import Dict, List
 from totp import get_mfa
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 class UPass():
     def __init__(self):
@@ -37,7 +42,7 @@ class UPass():
         wait = WebDriverWait(driver, timeout=5)
 
         # Get to U-Pass BC page
-        print("Opening U-Pass BC")
+        logging.info("Opening U-Pass BC")
         driver.get('https://upassbc.translink.ca')
         dropdown = Select(driver.find_element(by=By.ID, value= "ddlIdp"))
         dropdown.select_by_visible_text('Simon Fraser University')
@@ -46,7 +51,7 @@ class UPass():
         # assert driver.current_url.startswith("https://cas.sfu.ca/cas/login")
 
         # Initial SFU login
-        print("Logging in to SFU...")
+        logging.info('Logging into SFU...')
         sfu_data: Dict[str, str] = self._sfu_usr_pass
         username = driver.find_element(by=By.ID, value="username")
         username.send_keys(sfu_data['username'])
@@ -57,8 +62,7 @@ class UPass():
 
         # Validate that credentials were correct
         assert len(driver.find_elements(by=By.XPATH, value="//div[contains(@class, 'alert alert-danger')]")) == 0, "Invalid credentials! Please check your config file."
-
-        print("Initializing MFA...")
+        logging.info('Initializing MFA...')
         mfa_successful = False
         while(not mfa_successful):
             iframe = driver.find_element(by=By.ID, value='duo_iframe')
@@ -68,12 +72,12 @@ class UPass():
             code.send_keys(mfa_code)
             submit_mfa = driver.find_element(by=By.XPATH, value="//button[contains(@class, 'ui primary button')]")
             submit_mfa.click()
-            print("MFA successful!")
+            logging.info("MFA successful!")
             try:
                 wait.until(lambda d: driver.current_url.startswith('https://upassbc.translink.ca'))
                 mfa_successful = True
             except TimeoutException:
-                print("Incorrect MFA, reentering...")
+                logging.info("Incorrect MFA, reentering...")
 
          # Check if U-Pass is behaving erroneously or user is given access privileges
         assert driver.current_url != "https://upassbc.translink.ca/home/noprivilege", "❌ Could not login to U-Pass! Either U-Pass site is not working or SFU has not set you up for U-Pass!"
@@ -84,17 +88,17 @@ class UPass():
             driver.switch_to.default_content()
             checkbox = driver.find_element(by=By.ID, value= "chk_1")
             # Request eligibility
-            print("🕒 Requesting U-Pass...")
+            logging.info("🕒 Requesting U-Pass...")
             checkbox.click()
             request_button = driver.find_element(by=By.ID, value="requestButton")
             if request_button.get_attribute("disabled") != None:
-                print("❌ Unable to request for U-Pass")
+                logging.info("❌ Unable to request for U-Pass")
             else:
                 request_button.click()
-                print("🟢 Successfully requested U-Pass!")
+                logging.info("🟢 Successfully requested U-Pass!")
         # No checkbox option was found
         except NoSuchElementException:
-            print("❌ Unable to request for U-Pass at this time. U-Pass cen be requested on the 16th of each month.")
+            logging.info("❌ Unable to request for U-Pass at this time. U-Pass cen be requested on the 16th of each month.")
         
 
 
@@ -121,7 +125,7 @@ if __name__ == '__main__':
                 chrome_options.add_argument('--headless=new')
                 driver = webdriver.Chrome(options=chrome_options)
     except NoSuchDriverException:
-        print("Missing relevant browser driver! (defaults to Chrome)")
+        logging.info("Missing relevant browser driver! (defaults to Chrome)")
         sys.exit(0)
     
     upass.request(driver)
